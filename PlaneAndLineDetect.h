@@ -38,10 +38,18 @@ struct Bound
 
 class PlaneAndLineDetect{
 public:
-    PlaneAndLineDetect(PointCloud<PointI>::Ptr input){
-        inputPCLptr = input;
+    PlaneAndLineDetect(){
+        inputPCLptr.reset(new PointCloud<PointI>);
         planeAndLinePCLptr.reset(new PointCloud<PointI>);
         normalPCLptr.reset(new PointCloud<PointNormal>);
+        planeAndLine_pub = nh.advertise<sensor_msgs::PointCloud2>("/plane_and_line",1);
+        lidarpoints_sub = nh.subscribe("/lidar_points",1,&PlaneAndLineDetect::startDetect,this);
+    }
+    void startDetect(const sensor_msgs::PointCloud2ConstPtr& point_cloud_msg){
+        frameID = (*point_cloud_msg).header.frame_id;
+        pcl::fromROSMsg(*point_cloud_msg,*inputPCLptr);
+        planeAndLinePCLptr->clear();
+        normalPCLptr->clear();
         for(int i=0;i<WIDTH;i++){
             for(int j=0;j<HEIGHT;j++){
                 depthMat[i][j] = 0;
@@ -95,7 +103,7 @@ public:
         }
         // cout << "chongdie = " << chongdie << endl;
         PointI middle,now,left,right;
-        const int thresholdN = 6; // the shortest
+        const int thresholdN = 4; // the shortest
         for(int w = 0;w < WIDTH;w++){
             int verticalNum = 1;
             int wPush = w;
@@ -133,7 +141,7 @@ public:
                         wPush = wR;
                         distance = rightD;
                     }
-                    if( distance<0.05 ){
+                    if( distance<0.1 ){
                         verticalNum++;
                         index_vector.push_back(n);
                         index_vector1.push_back(wPush);
@@ -464,6 +472,12 @@ public:
             }
             // cout << endl;
         }
+        // cout << planeAndLinePCLptr->size() << endl;
+        sensor_msgs::PointCloud2 msg_pcl2;
+        pcl::toROSMsg(*planeAndLinePCLptr,msg_pcl2);
+        msg_pcl2.header.frame_id = frameID;
+        msg_pcl2.header.stamp = ros::Time::now();
+        planeAndLine_pub.publish(msg_pcl2);
     }
     void computeNormal(){
         for(int w =0 ;w< WIDTH;w++){
@@ -557,6 +571,12 @@ public:
     Matrix3d varianceMat[WIDTH][HEIGHT];
     int clusterMat[WIDTH][HEIGHT];
     int lable;
+
+    ros::NodeHandle nh;
+    string frameID;
+
+    ros::Publisher planeAndLine_pub;
+    ros::Subscriber lidarpoints_sub;
 private:
     // static constexpr double cos[HEIGHT] =    {-0.261789,
     //                                      -0.226484,
